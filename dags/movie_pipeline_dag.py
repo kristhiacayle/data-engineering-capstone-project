@@ -6,7 +6,7 @@ Manually triggered — walang schedule, i-trigger lang kapag kailangan.
 
 Layers:
 - Bronze: Raw data mula sa GCS bucket, lahat TEXT, walang transforms
-- Silver: (to be added) Cleaned, typed, validated data
+- Silver: Typed tables + TMDB API enrichment para sa missing budget/revenue/genres
 - Gold: (to be added) Business-ready aggregations gamit dbt
 
 Bawat layer ay naka-TaskGroup para organized sa Airflow UI.
@@ -86,14 +86,36 @@ with DAG(
         ddl_bronze >> load_bronze >> validate_bronze
 
     # =============================================================
-    # SILVER LAYER (to be added)
+    # SILVER LAYER
+    # Typed tables + TMDB API enrichment para sa missing data
+    # transform_silver at validate_silver will be added sa next step
     # =============================================================
-    # with TaskGroup('silver_tasks') as silver_tasks:
-    #     ddl_silver = BashOperator(...)
-    #     enrich_silver = BashOperator(...)
-    #     transform_silver = BashOperator(...)
-    #     validate_silver = BashOperator(...)
-    #     ddl_silver >> enrich_silver >> transform_silver >> validate_silver
+    with TaskGroup("silver_tasks") as silver_tasks:
+
+        # Task 1: Gawa ng silver schema at typed tables kung wala pa
+        # INTEGER, DATE, NUMERIC columns — hindi na lahat TEXT tulad ng Bronze
+        # IF NOT EXISTS — safe i-rerun kahit existing na ang tables
+        ddl_silver = BashOperator(
+            task_id="ddl_silver",
+            bash_command="docker exec pandas-worker python /scripts/silver/silver_ddl.py",
+            doc="Gawa ng silver schema at typed tables (movies_main, movie_extended, "
+                "movies_enriched). With COMMENTs.",
+        )
+
+        # Task 2: TMDB API enrichment para sa movies na may missing budget/revenue/genres
+        # Binabasa ang bronze rows na may 0/NULL values, tinatawagan ang TMDB API
+        # Results na-save sa silver.movies_enriched — supplement table, hindi replacement
+        # ~38K candidates at 20 req/sec = ~30 minutes runtime — normal ito
+        enrich_silver = BashOperator(
+            task_id="enrich_silver",
+            bash_command="docker exec pandas-worker python /scripts/silver/silver_enrich.py",
+            doc="TMDB API enrichment: basahin ang bronze rows na may missing "
+                "budget/revenue/genres, tawagin ang TMDB API, at i-save ang "
+                "results sa silver.movies_enriched.",
+        )
+
+        # transform_silver at validate_silver will be added sa next step
+        ddl_silver >> enrich_silver
 
     # =============================================================
     # GOLD LAYER (to be added)
@@ -104,6 +126,9 @@ with DAG(
     #     dbt_run >> dbt_test
 
     # =============================================================
-    # CROSS-LAYER DEPENDENCIES (to be added)
+    # CROSS-LAYER DEPENDENCIES
+    # Bronze must pass validation bago mag-start ang Silver
     # =============================================================
-    # bronze_tasks >> silver_tasks >> gold_tasks
+    bronze_tasks >> silver_tasks
+
+    # bronze_tasks >> silver_tasks >> gold_tasks  # buong chain kapag kumpleto na
