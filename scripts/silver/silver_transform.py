@@ -22,31 +22,10 @@ logger.remove()
 logger.add(sys.stdout, format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
 logger.add("/logs/silver/silver.log", format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}", rotation="10 MB")
 
-# === Table Definitions ===
-# Tatlong output tables — typed columns at COMMENTs
-OUTPUT_TABLES = {
-    "movies": {
-        "columns": {
-            "movie_id": {"type": "INTEGER", "comment": "Unique identifier ng movie, deduplicated mula sa bronze.movies_main"},
-            "title": {"type": "TEXT", "comment": "Opisyal na title ng movie, trimmed"},
-            "release_date": {"type": "DATE", "comment": "Petsa ng release, na-parse mula sa mixed formats"},
-            "budget": {"type": "NUMERIC", "comment": "Budget sa USD — bronze value kung >0, else TMDB enriched value, else NULL"},
-            "revenue": {"type": "NUMERIC", "comment": "Revenue sa USD — bronze value kung >0, else TMDB enriched value, else NULL"},
-        }
-    },
-    "movie_genres": {
-        "columns": {
-            "movie_id": {"type": "INTEGER", "comment": "TMDB movie ID, foreign key sa silver.movies"},
-            "genre": {"type": "TEXT", "comment": "Isang genre ng movie — one row per genre per movie"},
-        }
-    },
-    "production_companies": {
-        "columns": {
-            "movie_id": {"type": "INTEGER", "comment": "TMDB movie ID, foreign key sa silver.movies"},
-            "company_name": {"type": "TEXT", "comment": "Pangalan ng isang production company — one row per company per movie"},
-        }
-    },
-}
+# === Output Tables ===
+# Tatlong tables na sisimulan ng transform — ginagamit para sa TRUNCATE at verify
+# DDL at COMMENTs ay nasa silver_ddl.py na — dito, table names lang ang kailangan
+OUTPUT_TABLES = ["movies", "movie_genres", "production_companies"]
 
 
 def get_engine():
@@ -56,34 +35,6 @@ def get_engine():
         f"@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
     )
     return create_engine(db_url)
-
-
-def create_output_tables(engine):
-    """
-    Gawa ng output tables sa silver schema kung wala pa.
-    Typed columns at COMMENTs para sa bawat column.
-    """
-    for table_name, config in OUTPUT_TABLES.items():
-        # I-build ang CREATE TABLE statement
-        col_defs = ", ".join(
-            f'"{col}" {meta["type"]}' for col, meta in config["columns"].items()
-        )
-        create_sql = f"CREATE TABLE IF NOT EXISTS silver.{table_name} ({col_defs})"
-
-        with engine.connect() as conn:
-            conn.execute(text(create_sql))
-            conn.commit()
-        logger.info(f"Table 'silver.{table_name}' na-create na (o existing na)")
-
-        # I-add ang COMMENTs sa bawat column
-        with engine.connect() as conn:
-            for col_name, meta in config["columns"].items():
-                comment_sql = text(
-                    f'COMMENT ON COLUMN silver.{table_name}."{col_name}" IS :desc'
-                )
-                conn.execute(comment_sql, {"desc": meta["comment"]})
-            conn.commit()
-        logger.info(f"Comments added sa silver.{table_name}")
 
 
 def truncate_output_tables(engine):
@@ -145,15 +96,14 @@ def transform_movies(engine, df_main, df_enriched):
 
     df_main["release_date"] = parsed_date
 
-    # Step 4c: Cast budget at revenue mula TEXT → NUMERIC
+    # Step 4c: Cast budget, revenue, at id mula TEXT → NUMERIC bago mag-merge
     # 0 means unknown — palitan ng NaN para ma-fill ng enrichment
-    budget_bronze = pd.to_numeric(df_main["budget"], errors="coerce").replace(0, pd.NA)
-    revenue_bronze = pd.to_numeric(df_main["revenue"], errors="coerce").replace(0, pd.NA)
-
-    # Step 4d: Merge with silver.movies_enriched (LEFT JOIN)
-    # I-cast muna ang id sa integer para sa merge
+    # Cast IN-PLACE sa df_main para index-aligned ang merge result
+    df_main["budget"] = pd.to_numeric(df_main["budget"], errors="coerce").replace(0, pd.NA)
+    df_main["revenue"] = pd.to_numeric(df_main["revenue"], errors="coerce").replace(0, pd.NA)
     df_main["id"] = pd.to_numeric(df_main["id"], errors="coerce")
 
+    # Step 4d: Merge with silver.movies_enriched (LEFT JOIN)
     df_merged = df_main.merge(
         df_enriched[["movie_id", "budget", "revenue"]],
         left_on="id",
@@ -163,13 +113,11 @@ def transform_movies(engine, df_main, df_enriched):
     )
 
     # Fill missing: bronze value muna, kung wala, enriched value
-    df_merged["budget"] = budget_bronze.values
-    df_merged["budget"] = df_merged["budget"].fillna(df_merged["budget_enriched"])
-    # Replace enriched 0 values with NA din — 0 from TMDB means unknown din
+    # Gamit ang suffixed columns mula sa merge — index-aligned, hindi .values
+    df_merged["budget"] = df_merged["budget_bronze"].fillna(df_merged["budget_enriched"])
     df_merged.loc[df_merged["budget"] == 0, "budget"] = pd.NA
 
-    df_merged["revenue"] = revenue_bronze.values
-    df_merged["revenue"] = df_merged["revenue"].fillna(df_merged["revenue_enriched"])
+    df_merged["revenue"] = df_merged["revenue_bronze"].fillna(df_merged["revenue_enriched"])
     df_merged.loc[df_merged["revenue"] == 0, "revenue"] = pd.NA
 
     # Step 4e: Trim title
@@ -325,7 +273,7 @@ def verify_counts(engine):
 def main():
     """
     Main function — i-transform ang Bronze data papunta sa Silver output tables.
-    Steps: create tables, truncate, load, transform, write, verify.
+    Steps: truncate, load, transform, write, verify.
     """
     logger.info("=== Simula ng Silver Transform ===")
 
@@ -333,25 +281,23 @@ def main():
         engine = get_engine()
         logger.info("Database connection established")
 
-        # Step 1: Gawa ng output tables kung wala pa
-        create_output_tables(engine)
-
-        # Step 2: TRUNCATE lahat ng output tables — idempotent
+        # Step 1: TRUNCATE lahat ng output tables — idempotent
+        # Tables na-create na ng silver_ddl.py — hindi na kailangan i-create dito
         truncate_output_tables(engine)
 
-        # Step 3: Load source data
+        # Step 2: Load source data
         df_main, df_extended, df_enriched = load_source_data(engine)
 
-        # Step 4: Transform at write silver.movies
+        # Step 3: Transform at write silver.movies
         transform_movies(engine, df_main, df_enriched)
 
-        # Step 5: Transform at write silver.movie_genres
+        # Step 4: Transform at write silver.movie_genres
         transform_movie_genres(engine, df_extended, df_enriched)
 
-        # Step 6: Transform at write silver.production_companies
+        # Step 5: Transform at write silver.production_companies
         transform_production_companies(engine, df_extended)
 
-        # Step 7: Final verification
+        # Step 6: Final verification
         verify_counts(engine)
 
         engine.dispose()
