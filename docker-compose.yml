@@ -1,0 +1,175 @@
+# Docker Compose para sa Movies Pipeline (Medallion Architecture)
+# Mga containers: postgres, airflow (init/webserver/scheduler), pandas-worker, dbt-model
+# Lahat ng services naka-connect sa iisang network: capstone-network
+
+# === Shared Airflow Config ===
+# YAML anchor para hindi ma-duplicate ang environment, volumes, at depends_on
+# sa webserver at scheduler
+x-airflow-common: &airflow-common
+  build:
+    context: ./docker/airflow
+    dockerfile: Dockerfile
+  environment:
+    # Gamitin ang LocalExecutor kasi single-node setup lang tayo
+    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    # Connection string papunta sa airflow_metadata database sa postgres container
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow_metadata
+    # Fernet key para sa encryption ng sensitive data sa Airflow
+    - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+    # Huwag i-load ang example DAGs para malinis ang UI
+    - AIRFLOW__CORE__LOAD_EXAMPLES=false
+  volumes:
+    # Mount ang dags folder para makita ng Airflow ang mga DAG files
+    - ./dags:/opt/airflow/dags
+    # Mount ang Docker socket para ma-execute ang `docker exec` sa ibang containers
+    - /var/run/docker.sock:/var/run/docker.sock
+  depends_on:
+    airflow-init:
+      condition: service_completed_successfully
+  networks:
+    - capstone-network
+
+services:
+  # === PostgreSQL Database ===
+  # Central database na may tatlong schemas (bronze, silver, gold)
+  # at separate airflow_metadata database
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    ports:
+      # 5433 sa host para sa Power BI access, 5432 internally para sa containers
+      - "${POSTGRES_PORT}:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      # Named volume para persistent ang data kahit mag-restart
+      - postgres-data:/var/lib/postgresql/data
+      # Init script na gagawa ng schemas at airflow_metadata database
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/init.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - capstone-network
+
+  # === Airflow Init (One-Time Setup) ===
+  # Nagru-run lang isang beses para i-initialize ang Airflow database
+  # at gumawa ng admin user, tapos mag-e-exit
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db init &&
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # === Airflow Webserver ===
+  # Web UI para sa pag-manage at monitoring ng DAGs
+  # Accessible sa http://localhost:8080
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow-webserver
+    command: airflow webserver
+    ports:
+      - "${AIRFLOW_PORT}:8080"
+    restart: unless-stopped
+
+  # === Airflow Scheduler ===
+  # Nag-mo-monitor ng DAGs at nagti-trigger ng tasks base sa schedule
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow-scheduler
+    command: airflow scheduler
+    restart: unless-stopped
+
+  # === Pandas Worker ===
+  # Container para sa Bronze at Silver layer processing
+  # Walang sariling process — naka-tail -f /dev/null lang para manatiling buhay
+  # Ine-execute ng Airflow via `docker exec pandas-worker ...`
+  pandas-worker:
+    build:
+      context: ./docker/pandas-worker
+      dockerfile: Dockerfile
+    container_name: pandas-worker
+    entrypoint: ["tail", "-f", "/dev/null"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Scripts folder kung saan ilalagay ang bronze at silver processing scripts
+      - ./scripts:/scripts
+      # GCS service account key, read-only para sa security
+      - ./secrets:/secrets:ro
+      # Log output directories para sa Loguru
+      - ./logs/bronze:/logs/bronze
+      - ./logs/silver:/logs/silver
+    environment:
+      # Path sa GCS service account key sa loob ng container
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs_key.json
+      # TMDB API key para sa data extraction
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      # Database connection details — same credentials sa postgres container
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+    networks:
+      - capstone-network
+
+  # === dbt Model ===
+  # Container para sa Gold layer transformations gamit ang dbt
+  # Walang sariling process — naka-tail -f /dev/null lang para manatiling buhay
+  # Ine-execute ng Airflow via `docker exec dbt-model dbt run ...`
+  dbt-model:
+    build:
+      context: ./docker/dbt-model
+      dockerfile: Dockerfile
+    container_name: dbt-model
+    entrypoint: ["tail", "-f", "/dev/null"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount ang dbt project files sa loob ng container
+      - ./dbt:/usr/app/movies
+      # Log output directory para sa Loguru gold logs
+      - ./logs/gold:/logs/gold
+    environment:
+      # Database connection details — same credentials sa postgres container
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+    networks:
+      - capstone-network
+
+# === Named Volumes ===
+# Persistent storage para sa Postgres data
+volumes:
+  postgres-data:
+
+# === Network ===
+# Shared bridge network para sa lahat ng containers
+networks:
+  capstone-network:
+    driver: bridge

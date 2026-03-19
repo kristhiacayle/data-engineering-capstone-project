@@ -1,0 +1,18 @@
+# dbt Profiles Configuration
+# Connection settings para sa PostgreSQL database
+# Gumagamit ng environment variables para sa credentials,
+# may default values para sa local development
+
+movies_pipeline:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DB_HOST', 'postgres') }}"
+      port: 5432
+      user: "{{ env_var('DB_USER', 'capstone') }}"
+      password: "{{ env_var('DB_PASSWORD', 'capstone123') }}"
+      dbname: "{{ env_var('DB_NAME', 'movies_pipeline') }}"
+      # Gold schema — dito mapupunta ang mga dbt models
+      schema: gold
+      threads: 1

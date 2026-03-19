@@ -1,0 +1,6 @@
+# Dependencies para sa Gold layer dbt transformations
+# Pinned versions para sa reproducibility
+
+dbt-postgres==1.7.4    # dbt adapter para sa PostgreSQL
+loguru==0.7.2          # Logging library para sa structured logs
+protobuf<5             # Pinned para maiwasan ang known bug sa dbt 1.7.4 MessageToJson error

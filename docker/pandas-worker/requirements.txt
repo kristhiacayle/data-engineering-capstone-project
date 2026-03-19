@@ -1,0 +1,11 @@
+# Dependencies para sa Bronze at Silver layer processing
+# Pinned versions para sa reproducibility
+
+pandas==2.1.4                  # Data manipulation at transformation
+sqlalchemy==2.0.23             # Database connection at ORM
+psycopg2-binary==2.9.9        # PostgreSQL driver para sa SQLAlchemy
+gcsfs==2023.12.2.post1         # Google Cloud Storage filesystem interface
+google-cloud-storage==2.13.0   # GCS client library para sa pag-download ng data
+pandera==0.18.0                # Data validation at schema enforcement
+loguru==0.7.2                  # Logging library para sa structured logs
+requests==2.31.0               # HTTP requests para sa TMDB API calls

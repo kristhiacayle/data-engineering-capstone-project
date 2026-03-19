@@ -1,0 +1,22 @@
+# dbt Project Configuration
+# Minimal setup para sa movies_pipeline Gold layer transformations
+# Walang model configurations dito — idadagdag sa ibang pagkakataon
+
+name: 'movies_pipeline'
+version: '1.0.0'
+config-version: 2
+
+# Profile name na naka-match sa profiles.yml
+profile: 'movies_pipeline'
+
+# Standard directory paths para sa dbt project
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"

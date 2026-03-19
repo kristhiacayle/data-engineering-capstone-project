@@ -1,0 +1,2 @@
+# Shell scripts MUST use LF line endings para hindi mag-error sa Linux containers
+*.sh text eol=lf

@@ -1,0 +1,30 @@
+# === Secrets / Credentials ===
+# Huwag i-commit ang mga sensitive files (API keys, service account keys)
+secrets/*.json
+secrets/*.key
+
+# === Logs ===
+# Generated at runtime, hindi kailangan sa repo
+logs/
+
+# === Environment Variables ===
+# May passwords at API keys dito, huwag i-commit
+.env
+
+# === Python Cache ===
+# Auto-generated ng Python, hindi kailangan sa repo
+__pycache__/
+*.pyc
+
+# === Postgres Data ===
+# Kung gumagamit ng bind mount instead of named volume
+postgres-data/
+
+# === dbt Generated Files ===
+# Auto-generated ng dbt, hindi kailangan sa repo
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+
+# === OS Files ===
+*.DS_Store
