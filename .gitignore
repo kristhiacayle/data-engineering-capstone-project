@@ -1,7 +1,6 @@
 # === Secrets / Credentials ===
 # Huwag i-commit ang mga sensitive files (API keys, service account keys)
-secrets/*.json
-secrets/*.key
+secrets/
 
 # === Logs ===
 # Generated at runtime, hindi kailangan sa repo
