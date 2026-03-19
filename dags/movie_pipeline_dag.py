@@ -114,8 +114,20 @@ with DAG(
                 "results sa silver.movies_enriched.",
         )
 
-        # transform_silver at validate_silver will be added sa next step
-        ddl_silver >> enrich_silver
+        # Task 3: Transform bronze data → silver output tables
+        # Cast types, dedup IDs, parse mixed date formats, merge TMDB enrichment
+        # Explode genres at production companies sa separate tables
+        # Writes to silver.movies, silver.movie_genres, silver.production_companies
+        transform_silver = BashOperator(
+            task_id="transform_silver",
+            bash_command="docker exec pandas-worker python /scripts/silver/silver_transform.py",
+            doc="Transform bronze data: cast types, dedup, null handling, trim strings, "
+                "parse nested fields. Writes to silver.movies, silver.movie_genres, "
+                "silver.production_companies.",
+        )
+
+        # validate_silver will be added sa next step
+        ddl_silver >> enrich_silver >> transform_silver
 
     # =============================================================
     # GOLD LAYER (to be added)
