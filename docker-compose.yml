@@ -123,8 +123,9 @@ services:
     environment:
       # Path sa GCS service account key sa loob ng container
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs_key.json
-      # TMDB API key para sa data extraction
-      - TMDB_API_KEY=${TMDB_API_KEY}
+      # TMDB API keys para sa data extraction — dalawang keys para sa load balancing
+      - TMDB_API_KEY_1=${TMDB_API_KEY_1}
+      - TMDB_API_KEY_2=${TMDB_API_KEY_2}
       # Database connection details — same credentials sa postgres container
       - DB_HOST=postgres
       - DB_PORT=5432
