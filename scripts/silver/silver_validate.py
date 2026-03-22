@@ -13,25 +13,21 @@ from loguru import logger
 from sqlalchemy import create_engine, text
 
 # === Loguru Configuration ===
-# Dalawang sinks: stdout para sa real-time monitoring, file para sa audit trail
 logger.remove()
 logger.add(sys.stdout, format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
 logger.add("/logs/silver/silver.log", format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}", rotation="10 MB")
 
 # === Pandera Schemas ===
-# Isa-isang schema para sa bawat silver table
 # strict=True — mag-fail kung may extra o kulang na columns
 # movie_id: walang dtype check — nullable=False lang
-#   Bakit: PostgreSQL INTEGER → int64 pag walang NULLs, pero float64 pag may NULLs
-#   Kung i-check natin pa.Column(int), mag-fail ng "expected int got float" kapag may NULL
-#   — nakakalito. nullable=False catches NULLs clearly ("non-nullable contains null").
-#   Check 3 at Check 4 ang nag-ga-guarantee ng type safety ng movie_id.
+#   Bakit: PostgreSQL INTEGER/BIGINT → int64 pag walang NULLs, pero float64 pag may NULLs
+#   nullable=False catches NULLs clearly. Check 3 at Check 4 guarantee type safety.
 SCHEMAS = {
     "movies": pa.DataFrameSchema(
         columns={
             "movie_id": pa.Column(nullable=False),
             "title": pa.Column(object, nullable=True),
-            "release_date": pa.Column(object, nullable=True),  # PostgreSQL DATE loads as object, not datetime64
+            "release_date": pa.Column(object, nullable=True),  # PostgreSQL DATE loads as object
             "budget": pa.Column(float, nullable=True),
             "revenue": pa.Column(float, nullable=True),
         },
@@ -57,13 +53,37 @@ SCHEMAS = {
             "budget": pa.Column(float, nullable=True),
             "revenue": pa.Column(float, nullable=True),
             "genres": pa.Column(object, nullable=True),
+            "production_countries": pa.Column(object, nullable=True),
+            "spoken_languages": pa.Column(object, nullable=True),
+        },
+        strict=True,
+    ),
+    "producing_countries": pa.DataFrameSchema(
+        columns={
+            "movie_id": pa.Column(nullable=False),
+            "iso_country_code": pa.Column(object, nullable=False),
+            "country_name": pa.Column(object, nullable=False),
+        },
+        strict=True,
+    ),
+    "spoken_languages": pa.DataFrameSchema(
+        columns={
+            "movie_id": pa.Column(nullable=False),
+            "iso_language_code": pa.Column(object, nullable=False),
+            "language_name": pa.Column(object, nullable=False),
         },
         strict=True,
     ),
 }
 
-# Lahat ng silver tables na iva-validate
-SILVER_TABLES = ["movies", "movie_genres", "production_companies", "movies_enriched"]
+SILVER_TABLES = [
+    "movies",
+    "movie_genres",
+    "production_companies",
+    "movies_enriched",
+    "producing_countries",
+    "spoken_languages",
+]
 
 
 def get_engine():
@@ -78,15 +98,11 @@ def get_engine():
 def check_1_pandera_schema(engine):
     """
     Check 1: Pandera Schema Validation.
-    Bine-verify na:
-    - Lahat ng expected columns ay present (exact names)
-    - Walang extra/unexpected columns (strict=True)
-    - Bawat column ay may tamang dtype at nullability
+    Bine-verify na lahat ng expected columns ay present, walang extra, at tamang dtype/nullability.
     """
     logger.info("Nagsisimula ng Check 1: Pandera Schema Validation...")
 
     for table_name in SILVER_TABLES:
-        # LIMIT 1000 — schema check lang, hindi kailangan i-load ang buong table
         with engine.connect() as conn:
             df = pd.read_sql(
                 text(f"SELECT * FROM silver.{table_name} LIMIT 1000"),
@@ -99,7 +115,6 @@ def check_1_pandera_schema(engine):
                 f"I-run muna ang silver_transform.py."
             )
 
-        # I-validate gamit ang Pandera schema
         SCHEMAS[table_name].validate(df)
         logger.info(
             f"  Check 1 PASSED para sa silver.{table_name} — "
@@ -113,7 +128,6 @@ def check_2_row_counts(engine):
     """
     Check 2: Row Count > 0.
     Bawat silver table dapat may data — zero rows ibig sabihin nag-fail ang transform.
-    Pipeline BLOCKER ito.
     """
     logger.info("Nagsisimula ng Check 2: Row Count > 0...")
 
@@ -135,7 +149,7 @@ def check_3_no_null_movie_ids(engine):
     """
     Check 3: No NULL movie_ids.
     Ang movie_id column ay dapat walang NULL values sa lahat ng silver tables.
-    NULL movie_id = broken foreign key — pipeline BLOCKER ito.
+    NULL movie_id = broken foreign key — pipeline BLOCKER.
     """
     logger.info("Nagsisimula ng Check 3: No NULL movie_ids...")
 
@@ -159,7 +173,6 @@ def check_4_unique_movie_ids_in_movies(engine):
     """
     Check 4: Unique movie_ids sa silver.movies.
     Ang silver.movies ay deduplicated na — dapat walang duplicate movie_ids.
-    Duplicate = dedup step nag-fail — pipeline BLOCKER.
     """
     logger.info("Nagsisimula ng Check 4: Unique movie_ids sa silver.movies...")
 
@@ -182,64 +195,61 @@ def check_4_unique_movie_ids_in_movies(engine):
 def check_5_value_ranges(engine):
     """
     Check 5: Value Ranges.
-    5a. Budget at revenue sa silver.movies ay dapat >= 0 (walang negative)
-    5b. Walang empty strings sa genre column
-    5c. Walang empty strings sa company_name column
-    Pipeline BLOCKER — negative financials o empty strings = transform logic error.
+    5a. Budget at revenue >= 0 (walang negative)
+    5b. Walang empty strings sa genre
+    5c. Walang empty strings sa company_name
+    5d. Walang empty strings sa iso_country_code at country_name
+    5e. Walang empty strings sa iso_language_code at language_name
     """
     logger.info("Nagsisimula ng Check 5: Value Ranges...")
 
     # 5a: Budget >= 0
     with engine.connect() as conn:
-        result = conn.execute(
+        neg_budget = conn.execute(
             text("SELECT COUNT(*) FROM silver.movies WHERE budget < 0")
-        )
-        neg_budget = result.scalar()
-
-    assert neg_budget == 0, (
-        f"{neg_budget} negative budget(s) found sa silver.movies — "
-        f"budget must be >= 0"
-    )
-    logger.info(f"  Check 5a PASSED — 0 negative budgets")
+        ).scalar()
+    assert neg_budget == 0, f"{neg_budget} negative budget(s) found sa silver.movies"
+    logger.info("  Check 5a PASSED — 0 negative budgets")
 
     # 5b: Revenue >= 0
     with engine.connect() as conn:
-        result = conn.execute(
+        neg_revenue = conn.execute(
             text("SELECT COUNT(*) FROM silver.movies WHERE revenue < 0")
-        )
-        neg_revenue = result.scalar()
+        ).scalar()
+    assert neg_revenue == 0, f"{neg_revenue} negative revenue(s) found sa silver.movies"
+    logger.info("  Check 5b PASSED — 0 negative revenues")
 
-    assert neg_revenue == 0, (
-        f"{neg_revenue} negative revenue(s) found sa silver.movies — "
-        f"revenue must be >= 0"
-    )
-    logger.info(f"  Check 5b PASSED — 0 negative revenues")
-
-    # 5b: No empty strings sa genre
+    # 5c: No empty strings sa genre
     with engine.connect() as conn:
-        result = conn.execute(
+        empty_genres = conn.execute(
             text("SELECT COUNT(*) FROM silver.movie_genres WHERE TRIM(genre) = ''")
-        )
-        empty_genres = result.scalar()
+        ).scalar()
+    assert empty_genres == 0, f"{empty_genres} empty genre string(s) found"
+    logger.info("  Check 5c PASSED — 0 empty genre strings")
 
-    assert empty_genres == 0, (
-        f"{empty_genres} empty genre string(s) found sa silver.movie_genres — "
-        f"genre must not be empty"
-    )
-    logger.info(f"  Check 5b PASSED — 0 empty genre strings")
-
-    # 5c: No empty strings sa company_name
+    # 5d: No empty strings sa company_name
     with engine.connect() as conn:
-        result = conn.execute(
+        empty_companies = conn.execute(
             text("SELECT COUNT(*) FROM silver.production_companies WHERE TRIM(company_name) = ''")
-        )
-        empty_companies = result.scalar()
+        ).scalar()
+    assert empty_companies == 0, f"{empty_companies} empty company_name string(s) found"
+    logger.info("  Check 5d PASSED — 0 empty company_name strings")
 
-    assert empty_companies == 0, (
-        f"{empty_companies} empty company_name string(s) found sa silver.production_companies — "
-        f"company_name must not be empty"
-    )
-    logger.info(f"  Check 5c PASSED — 0 empty company_name strings")
+    # 5e: No empty strings sa iso_country_code at country_name
+    with engine.connect() as conn:
+        empty_country = conn.execute(
+            text("SELECT COUNT(*) FROM silver.producing_countries WHERE TRIM(iso_country_code) = '' OR TRIM(country_name) = ''")
+        ).scalar()
+    assert empty_country == 0, f"{empty_country} empty country field(s) found"
+    logger.info("  Check 5e PASSED — 0 empty country fields")
+
+    # 5f: No empty strings sa iso_language_code at language_name
+    with engine.connect() as conn:
+        empty_lang = conn.execute(
+            text("SELECT COUNT(*) FROM silver.spoken_languages WHERE TRIM(iso_language_code) = '' OR TRIM(language_name) = ''")
+        ).scalar()
+    assert empty_lang == 0, f"{empty_lang} empty language field(s) found"
+    logger.info("  Check 5f PASSED — 0 empty language fields")
 
     logger.info("Check 5: Value Ranges — PASSED")
 
@@ -248,56 +258,47 @@ def main():
     """
     Main function — i-run ang lahat ng 5 validation checks.
     Bawat check ay may sariling try/except para mapatuloy ang iba kahit may mag-fail.
-    Sa huli, kung may nag-fail, i-raise ang RuntimeError at exit ng non-zero code
-    para ma-detect ng Airflow BashOperator.
+    Sa huli, kung may nag-fail, i-raise ang RuntimeError at exit ng non-zero code.
     """
     logger.info("=== Simula ng Silver Validation ===")
 
     engine = get_engine()
     logger.info("Database connection established")
 
-    # Kolektahin ang lahat ng failed checks — i-report lahat sa dulo
     failed_checks = []
 
-    # --- Check 1: Pandera Schema Validation ---
     try:
         check_1_pandera_schema(engine)
     except Exception as e:
         logger.error(f"Check 1 FAILED: {e}")
         failed_checks.append(f"Check 1 (Pandera Schema): {e}")
 
-    # --- Check 2: Row Count > 0 ---
     try:
         check_2_row_counts(engine)
     except Exception as e:
         logger.error(f"Check 2 FAILED: {e}")
         failed_checks.append(f"Check 2 (Row Counts): {e}")
 
-    # --- Check 3: No NULL movie_ids ---
     try:
         check_3_no_null_movie_ids(engine)
     except Exception as e:
         logger.error(f"Check 3 FAILED: {e}")
         failed_checks.append(f"Check 3 (No NULL movie_ids): {e}")
 
-    # --- Check 4: Unique movie_ids in silver.movies ---
     try:
         check_4_unique_movie_ids_in_movies(engine)
     except Exception as e:
         logger.error(f"Check 4 FAILED: {e}")
         failed_checks.append(f"Check 4 (Unique movie_ids): {e}")
 
-    # --- Check 5: Value Ranges ---
     try:
         check_5_value_ranges(engine)
     except Exception as e:
         logger.error(f"Check 5 FAILED: {e}")
         failed_checks.append(f"Check 5 (Value Ranges): {e}")
 
-    # I-dispose ang engine para linisin ang connections
     engine.dispose()
 
-    # --- Final Summary ---
     logger.info("=== Silver Validation SUMMARY ===")
 
     if failed_checks:
@@ -318,6 +319,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        # Non-zero exit code para ma-detect ng Airflow BashOperator ang failure
         logger.error(f"Unhandled exception: {e}")
         sys.exit(1)
