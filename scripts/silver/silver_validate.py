@@ -26,7 +26,7 @@ SCHEMAS = {
     "movies": pa.DataFrameSchema(
         columns={
             "movie_id": pa.Column(nullable=False),
-            "title": pa.Column(object, nullable=True),
+            "movie_title": pa.Column(object, nullable=True),
             "release_date": pa.Column(object, nullable=True),  # PostgreSQL DATE loads as object
             "budget": pa.Column(float, nullable=True),
             "revenue": pa.Column(float, nullable=True),
@@ -63,6 +63,9 @@ SCHEMAS = {
             "movie_id": pa.Column(nullable=False),
             "iso_country_code": pa.Column(object, nullable=False),
             "country_name": pa.Column(object, nullable=False),
+            "country_region": pa.Column(object, nullable=True),      # NULL only for unexpected ISO codes
+            "country_subregion": pa.Column(object, nullable=True),   # NULL only for unexpected ISO codes
+            "is_service_restricted": pa.Column(bool, nullable=False), # always TRUE or FALSE
         },
         strict=True,
     ),
