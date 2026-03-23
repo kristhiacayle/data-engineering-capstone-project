@@ -20,3 +20,12 @@ snapshot-paths: ["snapshots"]
 clean-targets:
   - "target"
   - "dbt_packages"
+
+models:
+  movies_pipeline:
+    staging:
+      +materialized: view       # staging = views, no storage cost, always fresh
+    intermediate:
+      +materialized: view       # intermediate = views, no redundant storage
+    marts:
+      +materialized: table      # marts = tables, fast for Power BI direct query
