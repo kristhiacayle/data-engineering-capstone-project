@@ -1,0 +1,176 @@
+version: 2
+
+models:
+  - name: fact_movies
+    description: >
+      Core movie fact table. Grain: one row per movie (movie_id).
+      Pre-aggregated genre/company/country/language counts for Power BI.
+      Scoped to 1980-2015 via stg_movies.
+    columns:
+      - name: movie_id
+        description: Primary key — TMDB movie ID.
+        tests:
+          - not_null
+          - unique
+      - name: movie_title
+        description: Movie title. Used as the primary grain label in Power BI.
+        tests:
+          - not_null
+      - name: release_year
+        description: Integer release year (1980-2015).
+        tests:
+          - not_null
+      - name: genre_count
+        description: Number of distinct genres for this movie. 0 if none.
+        tests:
+          - not_null
+      - name: company_count
+        description: Number of production companies. 0 if none.
+        tests:
+          - not_null
+      - name: country_count
+        description: Number of producing countries. 0 if none.
+        tests:
+          - not_null
+      - name: language_count
+        description: Number of spoken languages. 0 if none.
+        tests:
+          - not_null
+
+  - name: mart_genre_share
+    description: >
+      Genre % share across all scoped movies. 20 rows (one per genre).
+      pct_of_movies calculated via pct_of_total macro.
+    columns:
+      - name: genre
+        description: Genre label.
+        tests:
+          - not_null
+          - unique
+      - name: movie_count
+        description: Distinct movies with this genre.
+        tests:
+          - not_null
+      - name: pct_of_movies
+        description: Percentage of total scoped movies that have this genre.
+        tests:
+          - not_null
+
+  - name: mart_language_share
+    description: >
+      Language % share across all scoped movies. ~134 rows.
+      pct_of_movies calculated via pct_of_total macro.
+    columns:
+      - name: iso_language_code
+        description: ISO 639-1 language code.
+        tests:
+          - not_null
+          - unique
+      - name: language_name
+        description: English language name.
+        tests:
+          - not_null
+      - name: pct_of_movies
+        description: Percentage of total scoped movies that use this language.
+        tests:
+          - not_null
+
+  - name: mart_country_summary
+    description: >
+      Country-level movie counts with Prime Video region/subregion taxonomy.
+      ~168 rows (one per producing country). US = 40.3% of movie-country pairs.
+    columns:
+      - name: iso_country_code
+        description: ISO 3166-1 alpha-2 country code.
+        tests:
+          - not_null
+          - unique
+      - name: country_name
+        description: English country name.
+        tests:
+          - not_null
+      - name: country_region
+        description: Prime Video geographic region (NA, LATAM, EMEA, APAC).
+        tests:
+          - accepted_values:
+              values: ['NA', 'LATAM', 'EMEA', 'APAC']
+              quote: true
+              config:
+                where: "country_region IS NOT NULL"
+      - name: is_service_restricted
+        description: TRUE if Prime Video is unavailable in this country.
+        tests:
+          - not_null
+      - name: movie_count
+        description: Distinct movies produced in this country (scoped 1980-2015).
+        tests:
+          - not_null
+
+  - name: mart_yearly_trends
+    description: >
+      Year-over-year movie production trends. Grain: one row per year (1980-2015).
+      Includes YoY delta, YoY %, and 3-year rolling average from int_yearly_movie_trends.
+    columns:
+      - name: release_year
+        description: Calendar year.
+        tests:
+          - not_null
+          - unique
+      - name: movie_count
+        description: Movies released in this year.
+        tests:
+          - not_null
+
+  - name: bridge_movie_genres
+    description: Many-to-many bridge — movie ↔ genre. Used for genre filter in Power BI.
+    columns:
+      - name: movie_id
+        description: Foreign key → fact_movies.movie_id
+        tests:
+          - not_null
+      - name: genre
+        description: Genre label.
+        tests:
+          - not_null
+
+  - name: bridge_movie_languages
+    description: Many-to-many bridge — movie ↔ language. Used for language filter in Power BI.
+    columns:
+      - name: movie_id
+        description: Foreign key → fact_movies.movie_id
+        tests:
+          - not_null
+      - name: iso_language_code
+        description: ISO 639-1 language code.
+        tests:
+          - not_null
+
+  - name: bridge_movie_countries
+    description: >
+      Many-to-many bridge — movie ↔ country. Used for the 3-part country filter:
+      country search, region/subregion dropdown, service restriction tickbox.
+    columns:
+      - name: movie_id
+        description: Foreign key → fact_movies.movie_id
+        tests:
+          - not_null
+      - name: iso_country_code
+        description: ISO 3166-1 alpha-2 country code.
+        tests:
+          - not_null
+      - name: is_service_restricted
+        description: TRUE if Prime Video is unavailable in this country.
+        tests:
+          - not_null
+
+  - name: bridge_movie_companies
+    description: Many-to-many bridge — movie ↔ production company.
+    columns:
+      - name: movie_id
+        description: Foreign key → fact_movies.movie_id
+        tests:
+          - not_null
+      - name: company_name
+        description: Production company name.
+        tests:
+          - not_null
