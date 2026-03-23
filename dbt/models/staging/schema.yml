@@ -1,0 +1,101 @@
+version: 2
+
+models:
+  - name: stg_movies
+    description: >
+      Base movie records scoped to 1980-2015. Scope filter for the entire Gold layer —
+      all downstream models join here to inherit the date window.
+    columns:
+      - name: movie_id
+        description: Primary key — TMDB movie ID.
+        tests:
+          - not_null
+          - unique
+      - name: movie_title
+        description: Cleaned movie title (stripped whitespace).
+        tests:
+          - not_null
+      - name: release_date
+        description: Parsed release date. Always within 1980-01-01 to 2015-12-31 in this view.
+        tests:
+          - not_null
+      - name: release_year
+        description: Integer year extracted from release_date.
+        tests:
+          - not_null
+      - name: budget
+        description: Production budget in USD. NULL when unreported.
+      - name: revenue
+        description: Box office revenue in USD. NULL when unreported.
+
+  - name: stg_movie_genres
+    description: >
+      One row per movie-genre pair, scoped to 1980-2015.
+      DISTINCT applied to fix upstream duplicate genre rows.
+    columns:
+      - name: movie_id
+        description: Foreign key → stg_movies.movie_id
+        tests:
+          - not_null
+      - name: genre
+        description: Genre label (e.g. Action, Drama, Comedy).
+        tests:
+          - not_null
+
+  - name: stg_movie_companies
+    description: One row per movie-company pair, scoped to 1980-2015.
+    columns:
+      - name: movie_id
+        description: Foreign key → stg_movies.movie_id
+        tests:
+          - not_null
+      - name: company_name
+        description: Production company name. "The" artifact removed; Columbia Pictures normalized.
+        tests:
+          - not_null
+
+  - name: stg_movie_countries
+    description: >
+      One row per movie-country pair, scoped to 1980-2015.
+      Enriched with Prime Video region/subregion taxonomy and service restriction flag.
+    columns:
+      - name: movie_id
+        description: Foreign key → stg_movies.movie_id
+        tests:
+          - not_null
+      - name: iso_country_code
+        description: ISO 3166-1 alpha-2 country code.
+        tests:
+          - not_null
+      - name: country_name
+        description: English country name.
+        tests:
+          - not_null
+      - name: country_region
+        description: Prime Video geographic region.
+        tests:
+          - accepted_values:
+              values: ['NA', 'LATAM', 'EMEA', 'APAC']
+              quote: true
+              config:
+                where: "country_region IS NOT NULL"
+      - name: is_service_restricted
+        description: TRUE if Prime Video is unavailable in this country.
+        tests:
+          - not_null
+
+  - name: stg_movie_languages
+    description: One row per movie-language pair, scoped to 1980-2015.
+    columns:
+      - name: movie_id
+        description: Foreign key → stg_movies.movie_id
+        tests:
+          - not_null
+      - name: iso_language_code
+        description: ISO 639-1 language code.
+        tests:
+          - not_null
+      - name: language_name
+        description: English language name.
+        tests:
+          - not_null
