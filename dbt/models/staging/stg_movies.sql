@@ -1,7 +1,7 @@
 {{ config(materialized='view') }}
 
 -- stg_movies
--- Base movie records scoped to 1980-2015.
+-- Base movie records scoped to 1980-2016.
 -- This is the scope filter for the entire Gold layer —
 -- all downstream models join to this to inherit the window.
 
@@ -14,4 +14,4 @@ SELECT
     revenue
 FROM {{ source('silver', 'movies') }}
 WHERE release_date >= '1980-01-01'
-  AND release_date < '2016-01-01'
+  AND release_date < '2017-01-01'
