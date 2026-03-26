@@ -1,7 +1,7 @@
 {{ config(materialized='view') }}
 
 -- stg_movie_companies
--- One row per movie-company pair, scoped to 1980-2015.
+-- One row per movie-company pair, scoped to 1980-2016.
 
 SELECT
     pc.movie_id,
