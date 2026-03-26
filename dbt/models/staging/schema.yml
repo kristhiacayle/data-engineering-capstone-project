@@ -3,7 +3,7 @@ version: 2
 models:
   - name: stg_movies
     description: >
-      Base movie records scoped to 1980-2015. Scope filter for the entire Gold layer —
+      Base movie records scoped to 1980-2016. Scope filter for the entire Gold layer —
       all downstream models join here to inherit the date window.
     columns:
       - name: movie_id
@@ -16,7 +16,7 @@ models:
         tests:
           - not_null
       - name: release_date
-        description: Parsed release date. Always within 1980-01-01 to 2015-12-31 in this view.
+        description: Parsed release date. Always within 1980-01-01 to 2016-12-31 in this view.
         tests:
           - not_null
       - name: release_year
@@ -30,7 +30,7 @@ models:
 
   - name: stg_movie_genres
     description: >
-      One row per movie-genre pair, scoped to 1980-2015.
+      One row per movie-genre pair, scoped to 1980-2016.
       DISTINCT applied to fix upstream duplicate genre rows.
     columns:
       - name: movie_id
@@ -43,7 +43,7 @@ models:
           - not_null
 
   - name: stg_movie_companies
-    description: One row per movie-company pair, scoped to 1980-2015.
+    description: One row per movie-company pair, scoped to 1980-2016.
     columns:
       - name: movie_id
         description: Foreign key → stg_movies.movie_id
@@ -56,7 +56,7 @@ models:
 
   - name: stg_movie_countries
     description: >
-      One row per movie-country pair, scoped to 1980-2015.
+      One row per movie-country pair, scoped to 1980-2016.
       Enriched with Prime Video region/subregion taxonomy and service restriction flag.
     columns:
       - name: movie_id
@@ -85,7 +85,7 @@ models:
           - not_null
 
   - name: stg_movie_languages
-    description: One row per movie-language pair, scoped to 1980-2015.
+    description: One row per movie-language pair, scoped to 1980-2016.
     columns:
       - name: movie_id
         description: Foreign key → stg_movies.movie_id
