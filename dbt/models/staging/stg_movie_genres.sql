@@ -1,7 +1,7 @@
 {{ config(materialized='view') }}
 
 -- stg_movie_genres
--- One row per movie-genre pair, scoped to 1980-2015.
+-- One row per movie-genre pair, scoped to 1980-2016.
 -- DISTINCT on (movie_id, genre) to eliminate upstream duplicate genre rows
 -- (known data quality issue: some movies have genres written twice in bronze).
 
