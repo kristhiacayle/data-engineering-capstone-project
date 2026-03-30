@@ -44,14 +44,75 @@ This project was built as a data engineering capstone and ends in an acquisition
 
 ```text
 data-engineering-capstone-project/
-|-- dags/                  Airflow DAGs
-|-- scripts/               Bronze and Silver Python jobs
-|-- dbt/                   Gold-layer models, macros, and tests
-|-- docker/                Service Dockerfiles
-|-- postgres/              Database initialization
-|-- docs/                  Reproducibility and troubleshooting guides
-|-- movie_capstone.pbix    Power BI report
-|-- docker-compose.yml     Local stack
+|-- dags/
+|   `-- movie_pipeline_dag.py
+|-- datasets/
+|   |-- movies_main.csv
+|   `-- movie_extended.csv
+|-- dbt/
+|   |-- dbt_project.yml
+|   |-- profiles.yml
+|   |-- macros/
+|   |   |-- classify_budget.sql
+|   |   `-- pct_of_total.sql
+|   |-- models/
+|   |   |-- staging/
+|   |   |   |-- sources.yml
+|   |   |   |-- schema.yml
+|   |   |   |-- stg_movies.sql
+|   |   |   |-- stg_movie_genres.sql
+|   |   |   |-- stg_movie_companies.sql
+|   |   |   |-- stg_movie_countries.sql
+|   |   |   `-- stg_movie_languages.sql
+|   |   |-- intermediate/
+|   |   |   |-- schema.yml
+|   |   |   |-- int_movie_financials.sql
+|   |   |   `-- int_yearly_movie_trends.sql
+|   |   `-- marts/
+|   |       |-- schema.yml
+|   |       |-- fact_movies.sql
+|   |       |-- bridge_movie_genres.sql
+|   |       |-- bridge_movie_companies.sql
+|   |       |-- bridge_movie_countries.sql
+|   |       |-- bridge_movie_languages.sql
+|   |       |-- mart_genre_share.sql
+|   |       |-- mart_language_share.sql
+|   |       |-- mart_country_summary.sql
+|   |       `-- mart_yearly_trends.sql
+|   `-- tests/
+|-- docker/
+|   |-- airflow/
+|   |   `-- Dockerfile
+|   |-- dbt-model/
+|   |   `-- Dockerfile
+|   `-- pandas-worker/
+|       `-- Dockerfile
+|-- docs/
+|   |-- 01_start_here_checklist.md
+|   |-- 02_new_device_setup_and_pipeline_run.md
+|   |-- 03_power_bi_refresh_and_dashboard_rebuild.md
+|   |-- 04_validation_and_troubleshooting.md
+|   `-- system_architecture.jpg
+|-- logs/
+|-- postgres/
+|   `-- init.sh
+|-- scripts/
+|   |-- bronze/
+|   |   |-- bronze_ddl.py
+|   |   |-- bronze_load.py
+|   |   `-- bronze_validate.py
+|   `-- silver/
+|       |-- silver_ddl.py
+|       |-- silver_enrich.py
+|       |-- silver_transform.py
+|       `-- silver_validate.py
+|-- secrets/
+|   `-- gcs_key.json
+|-- .env
+|-- .gitattributes
+|-- .gitignore
+|-- docker-compose.yml
+|-- movie_capstone.pbix
 `-- README.md
 ```
 
