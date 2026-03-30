@@ -163,3 +163,11 @@ The correct order is:
 4. Power BI refresh
 
 Continue with [Power BI Refresh and Dashboard Rebuild](03_power_bi_refresh_and_dashboard_rebuild.md).
+
+For the final report state, make sure Page 1 is validated in its default view after refresh:
+
+- title: `Movie Catalog • 1980–2016`
+- subtitle: `Showing: All languages • All genres`
+- total films: `33,054`
+- `% English Titles`: `68.86%`
+- `Top Genre Share - Drama`: `46.08%`

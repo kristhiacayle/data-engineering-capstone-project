@@ -77,7 +77,10 @@ Then back in the main Power BI window:
 
 ## 6. Validate the Main Dashboard Numbers
 
-After refresh, the report should show:
+After refresh, clear Page 1 slicers back to the default state and confirm the report shows:
+
+- Title: `Movie Catalog • 1980–2016`
+- Subtitle: `Showing: All languages • All genres`
 
 - Total films: `33,054`
 - `% English Titles`: `68.86%`
@@ -97,10 +100,43 @@ The current dashboard also uses PBIX-side objects such as:
 - `GenreDemandWeights`
 - `AcquisitionPriority`
 - dynamic DAX measures for interactive visuals
+- dynamic Page 1 title/subtitle measures:
+  - `Movie Catalog Title (Dynamic)`
+  - `Movie Catalog Subtitle (Dynamic)`
+- dynamic Page 1 KPI measures:
+  - `Total Films in Catalog (Dynamic Display)`
+  - `% English Titles (Dynamic)`
+  - `Top Genre Share % (Dynamic)`
+  - `Top Genre Share Label (Dynamic)`
 
 These should already come with the PBIX file. You should not need to recreate them manually if you are opening the existing finalized PBIX.
 
-## 8. If Visuals Look Wrong After Refresh
+## 8. Confirm Final Page 1 Behavior
+
+Page 1 should be dynamic under the global page filters.
+
+When the following slicers change:
+
+- release date
+- production geography
+- `is_service_restricted`
+- spoken language
+- genre
+
+the report should update:
+
+- all Page 1 charts
+- all three KPI values
+- the dynamic title line
+- the dynamic subtitle line
+- the top-genre KPI label
+
+The one exception is the default title/subtitle text shown only when no slicer narrowing is active:
+
+- `Movie Catalog • 1980–2016`
+- `Showing: All languages • All genres`
+
+## 9. If Visuals Look Wrong After Refresh
 
 Check for these common causes:
 

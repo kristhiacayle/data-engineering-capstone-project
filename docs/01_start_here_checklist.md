@@ -57,15 +57,23 @@ Do not commit either file.
 8. Validate `bronze`, `silver`, and `gold` tables
 9. Open `movie_capstone.pbix`
 10. Confirm all Power Query imports point to `gold`, not `gold_gold`
-11. Refresh Power BI and validate the dashboard KPIs
+11. Refresh Power BI and validate the Page 1 title, subtitle, and KPI cards
 
 ## Expected Final Validation Numbers
 
-After a successful rebuild and Power BI refresh, the dashboard should show:
+After a successful rebuild and Power BI refresh, the default unfiltered Page 1 state should show:
+
+- Title: `Movie Catalog • 1980–2016`
+- Subtitle: `Showing: All languages • All genres`
 
 - Total films: `33,054`
 - `% English Titles`: `68.86%`
 - `Top Genre Share - Drama`: `46.08%`
 - Max release year in scope: `2016`
+
+Page 1 should also behave dynamically:
+
+- the two-line title should change when page filters change
+- all three KPI values should change when page filters change
 
 If those do not match, use [Validation and Troubleshooting](04_validation_and_troubleshooting.md).

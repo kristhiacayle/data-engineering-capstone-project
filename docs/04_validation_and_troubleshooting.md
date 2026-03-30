@@ -11,6 +11,8 @@ The reproduction is successful only if all of these are true:
 - `gold.fact_movies` has `33,054` rows
 - `gold.fact_movies` max `release_year` is `2016`
 - Power BI shows:
+  - `Movie Catalog • 1980–2016`
+  - `Showing: All languages • All genres`
   - `33,054`
   - `68.86%`
   - `46.08%`
@@ -119,9 +121,19 @@ Check:
 
 Page 1 should show:
 
+- title: `Movie Catalog • 1980–2016`
+- subtitle: `Showing: All languages • All genres`
 - `33,054` films
 - `% English Titles = 68.86%`
 - `Top Genre Share - Drama = 46.08%`
+
+Page 1 should also respond to the global page filters:
+
+- title year should react to the release-date slider
+- title geography should react to production geography filters
+- subtitle should react to language and genre slicers
+- all three KPI values should change with the active filter context
+- the third KPI label should update to the current top genre
 
 Page 2 should show:
 
@@ -140,3 +152,21 @@ Do not commit these local-only files:
 - `secrets/gcs_key.json`
 - PBIX files unless intentionally versioning them
 - local scratch folders such as `.claude/`
+
+## I. If the Page 1 Title Year Does Not Move With the Date Slider
+
+Most likely cause:
+
+- the title measure is reading `release_year` instead of `release_date`
+
+Expected fix in the finalized PBIX:
+
+- `Movie Catalog Title (Dynamic)` derives the year text from `gold_gold fact_movies[release_date]`
+
+If the DAX is already correct but the canvas still shows the old title:
+
+1. click the title card visual
+2. remove `Movie Catalog Title (Dynamic)` from the field well
+3. drag it back in
+
+Sometimes the card keeps stale rendered text until it is rebound.
