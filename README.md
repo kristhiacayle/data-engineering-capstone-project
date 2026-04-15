@@ -170,3 +170,7 @@ For exact environment variables, container checks, dbt commands, and Power BI re
 - The tracked datasets in `datasets/` are reference copies only; the pipeline reads from GCS.
 - `secrets/gcs_key.json` and `.env` are required locally and should not be committed.
 - The Power BI file depends on the local PostgreSQL connection described in the docs.
+
+## Dashboard
+![Dashboard_1](powerbi/dashboard_page_1.png)
+![Dashboard_2](powerbi/dashboard_page_2.png)
